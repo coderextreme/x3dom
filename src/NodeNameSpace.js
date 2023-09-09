@@ -21,6 +21,7 @@ x3dom.NodeNameSpace = function ( name, document )
     this.name = name;
     this.doc = document;
     this.baseURL = "";
+    this.setBaseURL( document.properties.properties.baseURL );
     this.defMap = {};
     this.parent = null;
     this.childSpaces = [];
@@ -178,7 +179,7 @@ x3dom.getElementAttribute = function ( attrName )
         attrib = this.__getAttribute( attrName.toLowerCase() );
     }
 
-    if ( attrib || !this._x3domNode )
+    if ( attrib != null || !this._x3domNode )
     {
         return attrib;
     }
@@ -203,7 +204,10 @@ x3dom.setElementAttribute = function ( attrName, newVal )
     var x3dNode = this._x3domNode;
     if ( x3dNode )
     {
-        x3dNode.updateField( attrName, newVal );
+        if ( !x3dom.userAgentFeature.supportsMutationObserver )
+        {
+            x3dNode.updateField( attrName, newVal );
+        }
         x3dNode._nameSpace.doc.needRender = true;
     }
 };
@@ -246,7 +250,7 @@ x3dom.getFieldValue = function ( fieldName )
 x3dom.setFieldValue = function ( fieldName, fieldvalue )
 {
     var x3dNode = this._x3domNode;
-    if ( x3dNode && ( x3dNode._vf[ fieldName ] !== undefined ) )
+    if ( x3dNode && ( x3dNode._vf[ fieldName ] !== undefined ) && x3dNode._nameSpace )
     {
         // SF/MF object types are cloned based on a copy function
         if ( fieldvalue instanceof Object && "copy" in fieldvalue )
@@ -291,11 +295,23 @@ x3dom.requestFieldRef = function ( fieldName )
 x3dom.releaseFieldRef = function ( fieldName )
 {
     var x3dNode = this._x3domNode;
-    if ( x3dNode && x3dNode._vf[ fieldName ] )
+    if ( x3dNode && x3dNode._vf[ fieldName ] && x3dNode._nameSpace )
     {
         x3dNode.fieldChanged( fieldName );
         x3dNode._nameSpace.doc.needRender = true;
     }
+};
+
+/**
+ * attach X3DOM's custom field interface functions
+ * @param {Dom} domNode - the dom node to which functions are attached
+ */
+x3dom.attachFieldAccess = function ( domNode )
+{
+    domNode.requestFieldRef = x3dom.requestFieldRef;
+    domNode.releaseFieldRef = x3dom.releaseFieldRef;
+    domNode.getFieldValue = x3dom.getFieldValue;
+    domNode.setFieldValue = x3dom.setFieldValue;
 };
 
 /**
@@ -400,6 +416,7 @@ x3dom.NodeNameSpace.prototype.setupTree = function ( domNode, parent )
             if ( n )
             {
                 domNode._x3domNode = n;
+                x3dom.attachFieldAccess( domNode );
             }
             return n;
         }
@@ -498,11 +515,7 @@ x3dom.NodeNameSpace.prototype.setupTree = function ( domNode, parent )
                 return null;
             }
 
-            // attach X3DOM's custom field interface functions
-            domNode.requestFieldRef = x3dom.requestFieldRef;
-            domNode.releaseFieldRef = x3dom.releaseFieldRef;
-            domNode.getFieldValue = x3dom.getFieldValue;
-            domNode.setFieldValue = x3dom.setFieldValue;
+            x3dom.attachFieldAccess( domNode );
 
             // find the NodeType for the given dom-node
             var nodeType = x3dom.nodeTypesLC[ domNode.localName.toLowerCase() ];

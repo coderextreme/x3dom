@@ -166,14 +166,17 @@ x3dom.registerNodeType(
                     {
                         hasTexCoord = true;
                         texCoords = texCoordNode._vf.point;
-                        if ( !hasTexCoordInd )
+                        var nTexCoords = hasTexCoordInd ?
+                            Math.max( ...texCoordInd ) + 1 : positions.length;
+                        var i,
+                            lastTexCoord = texCoords.length;
+                        for ( i = lastTexCoord; i < nTexCoords; i++ )
                         {
-                            var i,
-                                lastTexCoord = texCoords.length;
-                            for ( i = lastTexCoord; i < positions.length; i++ )
-                            {
-                                texCoords.push( texCoords[ i % lastTexCoord ] );
-                            }
+                            x3dom.debug.logWarning(
+                                "IFS " + ( this._DEF || "" ) +
+                                ": more tex. coords. required, guessing " +
+                                i + 1 + "th coord." );
+                            texCoords.push( texCoords[ i % lastTexCoord ] );
                         }
 
                         if ( x3dom.isa( texCoordNode, x3dom.nodeTypes.TextureCoordinate3D ) )
@@ -545,6 +548,7 @@ x3dom.registerNodeType(
                         var linklist = new x3dom.DoublyLinkedList();
                         var data = {};
                         cnt = 0; faceCnt = 0;
+                        this._mesh._multiIndIndices = [];
 
                         for ( i = 0; i < indexes.length; ++i )
                         {
@@ -554,7 +558,7 @@ x3dom.registerNodeType(
 
                                 for ( j = 0; j < multi_index_data.indices.length; j++ )
                                 {
-                                    this._mesh._indices[ 0 ].push( cnt );
+                                    this._mesh._multiIndIndices.push( multi_index_data.indices[ j ] );
                                     cnt++;
 
                                     this._mesh._positions[ 0 ].push( multi_index_data.point[ j ].x,
@@ -880,14 +884,13 @@ x3dom.registerNodeType(
                         {
                             hasTexCoord = true;
                             texCoords = texCoordNode._vf.point;
-                            if ( !hasTexCoordInd )
+                            var nTexCoords = hasTexCoordInd ?
+                                Math.max( ...texCoordInd ) + 1 : positions.length;
+                            var i,
+                                lastTexCoord = texCoords.length;
+                            for ( i = lastTexCoord; i < nTexCoords; i++ )
                             {
-                                var i,
-                                    lastTexCoord = texCoords.length;
-                                for ( i = lastTexCoord; i < positions.length; i++ )
-                                {
-                                    texCoords.push( texCoords[ i % lastTexCoord ] );
-                                }
+                                texCoords.push( texCoords[ i % lastTexCoord ] );
                             }
 
                             if ( x3dom.isa( texCoordNode, x3dom.nodeTypes.TextureCoordinate3D ) )

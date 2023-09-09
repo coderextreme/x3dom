@@ -160,17 +160,17 @@ x3dom.X3DDocument.prototype.advanceTime = function ( t )
     }
 };
 
-x3dom.X3DDocument.prototype.render = function ( ctx, vrFrameData, vrDisplay )
+x3dom.X3DDocument.prototype.render = function ( ctx, frameData )
 {
     if ( !ctx || !this._viewarea )
     {
         return;
     }
 
-    this._viewarea.setVRFrameData( vrFrameData );
-    this._viewarea.updateGamepads( vrDisplay );
+    this._viewarea.setVRFrameData( ctx, frameData );
+    this._viewarea.updateGamepads( frameData );
 
-    ctx.renderScene( this._viewarea );
+    ctx.renderScene( this._viewarea, frameData );
 };
 
 x3dom.X3DDocument.prototype.onPick = function ( ctx, x, y )
@@ -779,12 +779,16 @@ x3dom.X3DDocument.prototype.onNodeRemoved =  function ( removedNode, target )
         var parent = parentNode._x3domNode;
         var child = domNode._x3domNode;
 
-        var pickInfo = child.findX3DDoc()._viewarea._pickingInfo;
-        // quite coarse; perhaps better to check _after_ removal if these still exist
-        pickInfo.firstObj  = null;
-        pickInfo.lastObj = null;
-        pickInfo.lastClickObj = null;
-        pickInfo.pickObj = null;
+        var doc = child.findX3DDoc();
+        if ( doc )
+        {
+            var pickInfo = doc._viewarea._pickingInfo;
+            // quite coarse; perhaps better to check _after_ removal if these still exist
+            pickInfo.firstObj  = null;
+            pickInfo.lastObj = null;
+            pickInfo.lastClickObj = null;
+            pickInfo.pickObj = null;
+        }
 
         if ( parent && child )
         {
@@ -978,29 +982,39 @@ x3dom.X3DDocument.prototype.onX3DNodeAdded = function ( addedNode, target )
 
 x3dom.X3DDocument.prototype.onMutation = function ( records )
 {
-    for ( var i = 0, n = records.length; i < n; i++ )
+    var i,
+        n,
+        record,
+        newValue;
+    var set_prefix = "set_";
+    for ( i = 0, n = records.length; i < n; i++ )
     {
-        if ( records[ i ].type === "attributes" && records[ i ].oldValue )
+        record = records[ i ];
+        if ( record.type === "attributes" ) // && ( record.oldValue != null ) )
         {
-            this.onAttributeChanged( records[ i ].target,
-                records[ i ].attributeName,
-                records[ i ].target[ records[ i ].attributeName ] );
-        }
-        else if ( records[ i ].type === "childList" )
-        {
-            if ( records[ i ].removedNodes.length )
+            if ( record.oldValue != null || record.attributeName.startsWith( set_prefix ) )
             {
-                for ( var j = 0, k = records[ i ].removedNodes.length; j < k; j++ )
+                newValue = record.target.getAttribute( record.attributeName );
+                this.onAttributeChanged( record.target,
+                    record.attributeName,
+                    newValue );
+            }
+        }
+        else if ( record.type === "childList" )
+        {
+            if ( record.removedNodes.length )
+            {
+                for ( var j = 0, k = record.removedNodes.length; j < k; j++ )
                 {
-                    this.onNodeRemoved( records[ i ].removedNodes[ j ], records[ i ].target );
+                    this.onNodeRemoved( record.removedNodes[ j ], record.target );
                 }
             }
 
-            if ( records[ i ].addedNodes.length )
+            if ( record.addedNodes.length )
             {
-                for ( var j = 0, k = records[ i ].addedNodes.length; j < k; j++ )
+                for ( var j = 0, k = record.addedNodes.length; j < k; j++ )
                 {
-                    this.onNodeAdded( records[ i ].addedNodes[ j ], records[ i ].target );
+                    this.onNodeAdded( record.addedNodes[ j ], record.target );
                 }
             }
         }

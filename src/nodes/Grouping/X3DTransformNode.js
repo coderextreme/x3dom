@@ -96,14 +96,14 @@ x3dom.registerNodeType(
             {
                 var vol = this._graph.volume;
 
-                if ( !this.volumeValid() && this.renderFlag && this.renderFlag() )
+                if ( !this.volumeValid() && ( this._vf.bboxDisplay || this.renderFlag && this.renderFlag() ) )
                 {
                     this._graph.localMatrix = this._trafo;
 
                     for ( var i = 0, n = this._childNodes.length; i < n; i++ )
                     {
                         var child = this._childNodes[ i ];
-                        if ( !child || child.renderFlag && child.renderFlag() !== true )
+                        if ( !child || child.renderFlag && child.renderFlag() !== true && !child._vf.bboxDisplay )
                         {continue;}
 
                         var childVol = child.getVolume();
@@ -168,11 +168,14 @@ x3dom.registerNodeType(
                 //if (this._parentNodes.length == 0) {
                 var doc = this.findX3DDoc();
 
-                for ( i = 0, n = doc._nodeBag.trans.length; i < n; i++ )
+                if ( doc )
                 {
-                    if ( doc._nodeBag.trans[ i ] === this )
+                    for ( i = 0, n = doc._nodeBag.trans.length; i < n; i++ )
                     {
-                        doc._nodeBag.trans.splice( i, 1 );
+                        if ( doc._nodeBag.trans[ i ] === this )
+                        {
+                            doc._nodeBag.trans.splice( i, 1 );
+                        }
                     }
                 }
                 //}

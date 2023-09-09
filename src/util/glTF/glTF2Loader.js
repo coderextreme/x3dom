@@ -1,5 +1,4 @@
 /**
- *
  * @param {Object} gltf
  * @param {NodeNameSpace} nameSpace
  */
@@ -7,12 +6,24 @@ x3dom.glTF2Loader = function ( nameSpace )
 {
     this._nameSpace = nameSpace;
     this._definitions = {};
+    this._supportedExtensions = [
+        "KHR_materials_pbrSpecularGlossiness",
+        "KHR_materials_unlit",
+        "KHR_texture_transform",
+        "KHR_lights_punctual",
+        "KHR_materials_emissive_strength"
+    ];
+    if ( x3dom.DracoDecoderModule )
+    {
+        this._supportedExtensions.push( "KHR_draco_mesh_compression" );
+    }
 };
 
 /**
  * Starts the loading/parsing of the glTF-Object
  * @param {Object} gltf
  */
+
 x3dom.glTF2Loader.prototype.load = function ( input, binary )
 {
     this._gltf = this._getGLTF( input, binary );
@@ -28,6 +39,14 @@ x3dom.glTF2Loader.prototype.load = function ( input, binary )
 
     //generate worldinfo from asset properties and extras
     this._generateX3DWorldInfo( scene, x3dScene );
+
+    //check if unsupported extensions are required
+    if ( this._unsupportedExtensionsRequired() )
+    {
+        x3dom.debug.logWarning( "Cannot render glTF." );
+        x3dom.debug.logWarning( "Some required extension of " + this._gltf.extensionsRequired + " not supported." );
+        return x3dScene;
+    }
 
     // Get the nodes
     for ( var i = 0; i < scene.nodes.length; i++ )
@@ -50,6 +69,21 @@ x3dom.glTF2Loader.prototype.load = function ( input, binary )
     }
 
     return x3dScene;
+};
+
+/**
+ * return true if an extension is required but not supported
+ */
+x3dom.glTF2Loader.prototype._unsupportedExtensionsRequired = function ()
+{
+    if ( !this._gltf.extensionsRequired )
+    {
+        return false;
+    }
+    return this._gltf.extensionsRequired.some( function ( e )
+    {
+        return this._supportedExtensions.indexOf( e ) < 0;
+    }, this );
 };
 
 /**
@@ -229,7 +263,44 @@ x3dom.glTF2Loader.prototype._generateX3DNode = function ( node, index )
         x3dNode.appendChild( this._generateX3DViewpoint( node ) );
     }
 
+    if ( node.extensions && node.extensions.KHR_lights_punctual && node.extensions.KHR_lights_punctual.light != undefined )
+    {
+        var light;
+        if ( this._gltf.extensions && this._gltf.extensions.KHR_lights_punctual && this._gltf.extensions.KHR_lights_punctual.lights )
+        {
+            var light = this._gltf.extensions.KHR_lights_punctual.lights[ node.extensions.KHR_lights_punctual.light ];
+            if ( light )
+            {
+                x3dNode.appendChild( this._generateX3DLight( light ) );
+            }
+            else
+            {
+                x3dom.debug.logWarning( "glTF light with index " + node.extensions.KHR_lights_punctual.light + " requested but not defined in extension." );
+            }
+        }
+        else
+        {
+            x3dom.debug.logWarning( "glTF light requested but no lights defined." );
+        }
+    }
+
     return x3dNode;
+};
+
+/**
+ * Generates a X3D light node
+ */
+x3dom.glTF2Loader.prototype._generateX3DLight = function ( light )
+{
+    switch ( light.type )
+    {
+        case "point":
+            return this._generateX3DPointLight( light );
+        case "directional":
+            return this._generateX3DDirectionalLight( light );
+        case "spot":
+            return this._generateX3DSpotLight( light );
+    }
 };
 
 /**
@@ -240,6 +311,82 @@ x3dom.glTF2Loader.prototype._generateX3DScene = function ()
     var scene = document.createElement( "scene" );
 
     return scene;
+};
+
+/**
+ * Generates a X3D light node
+ */
+x3dom.glTF2Loader.prototype._generateX3DLight = function ( light )
+{
+    switch ( light.type )
+    {
+        case "point":
+            return this._generateX3DPointLight( light );
+        case "directional":
+            return this._generateX3DDirectionalLight( light );
+        case "spot":
+            return this._generateX3DSpotLight( light );
+    }
+};
+
+/**
+ * Generates initial light element of type with shared X3D Light fields
+ */
+x3dom.glTF2Loader.prototype._createX3DLightElement = function ( type, light )
+{
+    var x3dLight = document.createElement( type );
+    if ( light.color != undefined )
+    {
+        x3dLight.setAttribute( "color", light.color.join( " " ) );
+    }
+
+    if ( light.name != undefined && light.name != "" )
+    {
+        x3dLight.setAttribute( "DEF", "glTF_LIGHT_" + light.name );
+    }
+
+    var intensity = light.intensity || 1.0;
+    x3dLight.setAttribute( "intensity", intensity );
+    x3dLight.setAttribute( "global", true );
+    return x3dLight;
+};
+
+/**
+ * Generates a X3D PointLight node
+ */
+x3dom.glTF2Loader.prototype._generateX3DPointLight = function ( light )
+{
+    var x3dLight = this._createX3DLightElement( "PointLight", light );
+    var radius = light.range || 1e6;
+    x3dLight.setAttribute( "radius", radius );
+    x3dLight.setAttribute( "attenuation", "0 0 1" );
+    return x3dLight;
+};
+
+/**
+ * Generates a X3D SpotLight node
+ */
+x3dom.glTF2Loader.prototype._generateX3DSpotLight = function ( light )
+{
+    var x3dLight = this._createX3DLightElement( "SpotLight", light );
+    var radius = light.range || 1e6;
+    var beamWidth = light.innerConeAngle || 0;
+    var cutOffAngle = light.outerConeAngle || Math.PI / 4; // must be greater than inner
+    x3dLight.setAttribute( "radius", radius );
+    x3dLight.setAttribute( "beamWidth", beamWidth );
+    x3dLight.setAttribute( "cutOffAngle", cutOffAngle );
+    x3dLight.setAttribute( "attenuation", "0 0 1" );
+    return x3dLight;
+};
+
+/**
+ * Generates a X3D DirectionalLight node
+ */
+x3dom.glTF2Loader.prototype._generateX3DDirectionalLight = function ( light )
+{
+    var x3dLight = this._createX3DLightElement( "DirectionalLight", light );
+    //x3dLight.setAttribute( "direction", "0 0 -1" ); // is X3D default
+    return x3dLight;
 };
 
 /**
@@ -418,7 +565,18 @@ x3dom.glTF2Loader.prototype._generateX3DShape = function ( primitive )
 
     shape.appendChild( this._generateX3DAppearance( material ) );
 
-    shape.appendChild( this._generateX3DBufferGeometry( primitive ) );
+    var dracoExtension = null;
+    if ( primitive.extensions && primitive.extensions.KHR_draco_mesh_compression )
+    {
+        dracoExtension = primitive.extensions.KHR_draco_mesh_compression;
+    }
+
+    if ( dracoExtension && !x3dom.DracoDecoderModule )
+    {
+        return shape;
+    }
+
+    shape.appendChild( this._generateX3DBufferGeometry( primitive, dracoExtension ) );
 
     return shape;
 };
@@ -443,6 +601,7 @@ x3dom.glTF2Loader.prototype._generateX3DAppearance = function ( material )
     {
         appearance.setAttribute( "sortType", "opaque" );
     }
+    appearance.setAttribute( "alphaClipThreshold", 0 );
 
     appearance.appendChild( this._generateX3DPhysicalMaterial( material ) );
 
@@ -586,6 +745,12 @@ x3dom.glTF2Loader.prototype._generateX3DPhysicalMaterial = function ( material )
         mat.setAttribute( "unlit", true );
     }
 
+    if ( material.extensions && material.extensions.KHR_materials_emissive_strength && material.extensions.KHR_materials_emissive_strength.emissiveStrength )
+    {
+        var emissiveStrength = material.extensions.KHR_materials_emissive_strength.emissiveStrength;
+        emissiveFactor = emissiveFactor.map( ( rgb ) => { return rgb * emissiveStrength; } );
+    }
+
     mat.setAttribute( "emissiveFactor",  emissiveFactor.join( " " ) );
     mat.setAttribute( "alphaMode",  alphaMode );
     mat.setAttribute( "alphaCutoff", alphaCutoff );
@@ -706,17 +871,32 @@ x3dom.glTF2Loader.prototype._createX3DTextureTransform = function ( imagetexture
  * @param {Object} primitive - A glTF primitive node
  * @return {BufferGeometry}
  */
-x3dom.glTF2Loader.prototype._generateX3DBufferGeometry = function ( primitive )
+x3dom.glTF2Loader.prototype._generateX3DBufferGeometry = function ( primitive, dracoExtension )
 {
     var views = [];
     var bufferGeometry = document.createElement( "buffergeometry" );
     var centerAndSize = this._getCenterAndSize( primitive );
 
-    bufferGeometry.setAttribute( "buffer", this._bufferURI( primitive ) );
+    var bufferURI;
+
+    if ( dracoExtension )
+    {
+        bufferURI = x3dom.Utils.dataURIToObjectURL(
+            this._gltf.buffers[
+                this._gltf.bufferViews [
+                    dracoExtension.bufferView ].buffer ].uri );
+    }
+    else
+    {
+        bufferURI = this._bufferURI( primitive );
+    }
+
+    bufferGeometry.setAttribute( "buffer", bufferURI );
     bufferGeometry.setAttribute( "position", centerAndSize.center.join( " " ) );
     bufferGeometry.setAttribute( "size", centerAndSize.size.join( " " ) );
     bufferGeometry.setAttribute( "vertexCount", this._getVertexCount( primitive ) );
     bufferGeometry.setAttribute( "primType", this._primitiveType( primitive.mode ) );
+    bufferGeometry.setAttribute( "draco", dracoExtension !== null );
 
     //Check Material for double sided rendering
     if ( primitive.material != undefined )
@@ -729,38 +909,67 @@ x3dom.glTF2Loader.prototype._generateX3DBufferGeometry = function ( primitive )
         }
     }
 
+    var view,
+        viewID,
+        accessor;
+
     //Check for indices
     if ( primitive.indices != undefined )
     {
-        var accessor = this._gltf.accessors[ primitive.indices ];
+        accessor = this._gltf.accessors[ primitive.indices ];
 
-        var view = this._gltf.bufferViews[ accessor.bufferView ];
-        view.id = accessor.bufferView;
-        view.target = 34963;
-
-        var viewID = views.indexOf( view );
-
-        if ( view.target != undefined && viewID == -1 )
+        if ( dracoExtension )
         {
+            view = Object.assign( {}, this._gltf.bufferViews[ dracoExtension.bufferView ] );
+            view.idx = dracoExtension.bufferView;
+            view.target = 34963;
             viewID = views.push( view ) - 1;
+        }
+
+        else
+        {
+            view = Object.assign( {}, this._gltf.bufferViews[ accessor.bufferView ] );
+            view.idx = accessor.bufferView;
+            view.target = 34963;
+
+            viewID = views.indexOf( view );
+
+            if ( view.target != undefined && viewID == -1 )
+            {
+                viewID = views.push( view ) - 1;
+            }
         }
 
         bufferGeometry.appendChild( this._generateX3DBufferAccessor( "INDEX", accessor, viewID ) );
     }
 
-    for ( var attribute in primitive.attributes )
+    var attributes = dracoExtension ? dracoExtension.attributes : primitive.attributes;
+
+    for ( var attribute in attributes )
     {
-        var accessor = this._gltf.accessors[ primitive.attributes[ attribute ] ];
+        accessor = this._gltf.accessors[ primitive.attributes[ attribute ] ];
 
-        var view = this._gltf.bufferViews[ accessor.bufferView ];
-        view.target = 34962;
-        view.id = accessor.bufferView;
-
-        var viewID = views.indexOf( view );
-
-        if ( view.target != undefined && viewID == -1 )
+        if ( dracoExtension )
         {
+            view = Object.assign( {}, this._gltf.bufferViews[ dracoExtension.bufferView ] );
+            view.target = 34962;
+            view.idx = dracoExtension.bufferView;
+            view.dracoUniqueId = dracoExtension.attributes[ attribute ];
             viewID = views.push( view ) - 1;
+        }
+
+        else
+        {
+            view = Object.assign( {}, this._gltf.bufferViews[ accessor.bufferView ] );
+            view.target = 34962;
+            view.idx = accessor.bufferView;
+
+            viewID = views.indexOf( view );
+
+            if ( view.target != undefined && viewID == -1 )
+            {
+                viewID = views.push( view ) - 1;
+            }
         }
 
         bufferGeometry.appendChild( this._generateX3DBufferAccessor( attribute, accessor, viewID ) );
@@ -781,25 +990,28 @@ x3dom.glTF2Loader.prototype._generateX3DBufferView = function ( view )
     bufferView.setAttribute( "target",     view.target );
     bufferView.setAttribute( "byteOffset", view.byteOffset || 0 );
     bufferView.setAttribute( "byteLength", view.byteLength );
-    bufferView.setAttribute( "id", view.id );
+    bufferView.setAttribute( "idx", view.idx );
+    bufferView.setAttribute( "dracoId", view.dracoUniqueId !== undefined ? view.dracoUniqueId : -1 );
 
     return bufferView;
 };
 
-x3dom.glTF2Loader.prototype._generateX3DBufferAccessor = function ( buffer, accessor, viewID )
+x3dom.glTF2Loader.prototype._generateX3DBufferAccessor = function ( bufferType, accessor, viewID )
 {
     var components = this._componentsOf( accessor.type );
 
-    var bufferView = this._gltf.bufferViews[ accessor.bufferView ];
+    var bufferView = "bufferView" in accessor ? this._gltf.bufferViews[ accessor.bufferView ] : {};
 
-    var byteOffset = accessor.byteOffset;
+    var byteStride = "byteStride" in bufferView ? bufferView.byteStride : 0;
+
+    var byteOffset = "byteOffset" in accessor ? accessor.byteOffset : 0;
 
     var bufferAccessor = document.createElement( "bufferaccessor" );
 
-    bufferAccessor.setAttribute( "bufferType", buffer.replace( "_0", "" ) );
+    bufferAccessor.setAttribute( "bufferType", bufferType.replace( "_0", "" ) );
     bufferAccessor.setAttribute( "view", viewID );
-    bufferAccessor.setAttribute( "byteOffset", byteOffset || 0 );
-    bufferAccessor.setAttribute( "byteStride", bufferView.byteStride || 0 );
+    bufferAccessor.setAttribute( "byteOffset", byteOffset );
+    bufferAccessor.setAttribute( "byteStride", byteStride );
     bufferAccessor.setAttribute( "normalized", accessor.normalized || false );
 
     bufferAccessor.setAttribute( "components", components );

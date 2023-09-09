@@ -50,7 +50,7 @@ x3dom.registerNodeType(
              */
             this.addField_SFBool( ctx, "RGB", false );
 
-            this._lastValue = new x3dom.fields.SFColor();
+            this._lastValue = new x3dom.fields.SFColor( -1, -1, -1 );
             this.fieldChanged( "keyValue" );
         },
         {
@@ -60,7 +60,14 @@ x3dom.registerNodeType(
                 {
                     var value,
                         mix;
-                    if ( this._vf.RGB )
+                    if ( this._vf.interpolation === "STEP" )
+                    {
+                        value = this.linearInterp( this._vf.set_fraction, function ( a, b, t )
+                        {
+                            return a;
+                        } );
+                    }
+                    else if ( this._vf.RGB )
                     {
                         value = this.linearInterp( this._vf.set_fraction, function ( a, b, t )
                         {
@@ -109,6 +116,25 @@ x3dom.registerNodeType(
                     } );
                     this._keyValue = this._vf.keyValue.copy();
                 }
+            },
+
+            keyValueFromAccessor : function ( array )
+            {
+                var keyValue = new x3dom.fields.MFColor();
+                array.forEach( function ( val, i )
+                {
+                    if ( i % 3 == 2 )
+                    {
+                        keyValue.push( new x3dom.fields.SFColor(
+                            array[ i - 2 ],
+                            array[ i - 1 ],
+                            val
+                        ) );
+                    }
+                } );
+                this._vf.keyValue = keyValue;
+                this.fieldChanged( "keyValue" );
+                return keyValue;
             }
         }
     )

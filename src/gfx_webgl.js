@@ -32,7 +32,6 @@ x3dom.gfx_webgl = ( function ()
         this.cache = new x3dom.Cache();
         this.stateManager = new x3dom.StateManager( ctx3d );
         this.VRMode = 1;
-        this.vrFrameData = null;
 
         this.BUFFER_IDX =
             {
@@ -1535,10 +1534,11 @@ x3dom.gfx_webgl = ( function ()
             var drawable = scene.drawableCollection.get( i );
             var trafo = drawable.transform;
             var shape = drawable.shape;
+            var transparent = drawable.sortType == "transparent";
 
             var s_gl = shape._webgl;
 
-            if ( !s_gl || ( excludeTrans && drawable.sortType == "transparent" ) )
+            if ( !s_gl || ( excludeTrans && transparent ) )
             {
                 continue;
             }
@@ -1616,6 +1616,9 @@ x3dom.gfx_webgl = ( function ()
 
             // Set DepthMode
             var depthMode = s_app ? s_app._cf.depthMode.node : null;
+            var hasTexture = s_app ? s_app._cf.texture.node != null : false;
+            var writeDepth = !transparent || hasTexture;
+
             if ( depthMode )
             {
                 if ( depthMode._vf.enableDepthTest )
@@ -1642,7 +1645,7 @@ x3dom.gfx_webgl = ( function ()
             {
                 // Set Defaults
                 this.stateManager.enable( gl.DEPTH_TEST );
-                this.stateManager.depthMask( true );
+                this.stateManager.depthMask( writeDepth );
                 this.stateManager.depthFunc( gl.LEQUAL );
             }
 
@@ -1752,10 +1755,11 @@ x3dom.gfx_webgl = ( function ()
             this.stateManager.lineWidth( 1 );
         }
 
+        this.stateManager.depthMask( true );
+
         if ( depthMode )
         {
             this.stateManager.enable( gl.DEPTH_TEST );
-            this.stateManager.depthMask( true );
             this.stateManager.depthFunc( gl.LEQUAL );
             this.stateManager.depthRange( 0, 1 );
         }
@@ -1829,6 +1833,7 @@ x3dom.gfx_webgl = ( function ()
             var drawable = scene.drawableCollection.get( i );
             var trafo = drawable.transform;
             var shape = drawable.shape;
+            var transparent = drawable.sortType == "transparent";
             var s_gl = shape._webgl;
 
             if ( !s_gl || shape._objectID < 1 || !shape._vf.isPickable )
@@ -1953,6 +1958,9 @@ x3dom.gfx_webgl = ( function ()
 
             // Set DepthMode
             var depthMode = s_app ? s_app._cf.depthMode.node : null;
+            var hasTexture = s_app ? s_app._cf.texture.node != null : false;
+            var writeDepth = !transparent || hasTexture;
+
             if ( depthMode )
             {
                 if ( depthMode._vf.enableDepthTest )
@@ -1979,7 +1987,7 @@ x3dom.gfx_webgl = ( function ()
             {
                 // Set Defaults
                 this.stateManager.enable( gl.DEPTH_TEST );
-                this.stateManager.depthMask( true );
+                this.stateManager.depthMask( writeDepth );
                 this.stateManager.depthFunc( gl.LEQUAL );
             }
 
@@ -1995,7 +2003,10 @@ x3dom.gfx_webgl = ( function ()
             // TODO: ParticleSet for picking
 
             var pointProperties = s_app ? s_app._cf.pointProperties.node : null;
-            pointProperties = pointProperties && x3dom.isa( s_geo, x3dom.nodeTypes.PointSet );
+            pointProperties = pointProperties && (
+                x3dom.isa( s_geo, x3dom.nodeTypes.PointSet ) ||
+                x3dom.isa( s_geo, x3dom.nodeTypes.BinaryGeometry )
+            );
 
             if ( pointProperties )
             {
@@ -2130,10 +2141,11 @@ x3dom.gfx_webgl = ( function ()
             this.stateManager.lineWidth( 1 );
         }
 
+        this.stateManager.depthMask( true );
+
         if ( depthMode )
         {
             this.stateManager.enable( gl.DEPTH_TEST );
-            this.stateManager.depthMask( true );
             this.stateManager.depthFunc( gl.LEQUAL );
             this.stateManager.depthRange( 0, 1 );
         }
@@ -2183,6 +2195,7 @@ x3dom.gfx_webgl = ( function ()
 
         var shape = drawable.shape;
         var transform = drawable.transform;
+        var transparent = drawable.sortType == "transparent";
 
         if ( !shape || !shape._webgl || !transform )
         {
@@ -2517,6 +2530,9 @@ x3dom.gfx_webgl = ( function ()
 
         // Set DepthMode
         var depthMode = s_app ? s_app._cf.depthMode.node : null;
+        var hasTexture = s_app ? s_app._cf.texture.node != null : false;
+        var writeDepth = !transparent || hasTexture;
+
         if ( depthMode )
         {
             if ( depthMode._vf.enableDepthTest )
@@ -2543,7 +2559,7 @@ x3dom.gfx_webgl = ( function ()
         {
             // Set Defaults
             this.stateManager.enable( gl.DEPTH_TEST );
-            this.stateManager.depthMask( true );
+            this.stateManager.depthMask( writeDepth );
             this.stateManager.depthFunc( gl.LEQUAL );
         }
 
@@ -2554,7 +2570,7 @@ x3dom.gfx_webgl = ( function ()
             var srcFactor = x3dom.Utils.blendFunc( gl, blendMode._vf.srcFactor );
             var destFactor = x3dom.Utils.blendFunc( gl, blendMode._vf.destFactor );
 
-            if ( srcFactor && destFactor )
+            if ( srcFactor !== false && destFactor !== false )
             {
                 // Enable Blending
                 this.stateManager.enable( gl.BLEND );
@@ -2819,7 +2835,10 @@ x3dom.gfx_webgl = ( function ()
         }
 
         var pointProperties = s_app ? s_app._cf.pointProperties.node : null;
-        pointProperties = pointProperties && x3dom.isa( s_geo, x3dom.nodeTypes.PointSet );
+        pointProperties = pointProperties && (
+            x3dom.isa( s_geo, x3dom.nodeTypes.PointSet ) ||
+            x3dom.isa( s_geo, x3dom.nodeTypes.BinaryGeometry )
+        );
 
         if ( pointProperties )
         {
@@ -3141,10 +3160,12 @@ x3dom.gfx_webgl = ( function ()
         }
 
         // reset to default values for possibly user defined render states
+
+        this.stateManager.depthMask( true );
+
         if ( depthMode )
         {
             this.stateManager.enable( gl.DEPTH_TEST );
-            this.stateManager.depthMask( true );
             this.stateManager.depthFunc( gl.LEQUAL );
             this.stateManager.depthRange( 0, 1 );
         }
@@ -4229,6 +4250,7 @@ x3dom.gfx_webgl = ( function ()
         // rendering
         x3dom.Utils.startMeasure( "render" );
 
+        this.stateManager.bindFramebuffer( gl.FRAMEBUFFER, vrFrameData ? vrFrameData.framebuffer : null );
         this.stateManager.viewport( 0, 0, this.canvas.width, this.canvas.height );
 
         // calls gl.clear etc. (bgnd stuff)
@@ -4972,7 +4994,12 @@ x3dom.gfx_webgl = ( function ()
             for ( k = startIndex; k < endIndex; k++ )
             {currentLights[ currentLights.length ] = shadowedLights[ k ];}
 
-            var sp = this.cache.getShadowRenderingShader( gl, currentLights );
+            // generate shadow shader properties
+            var properties = {};
+
+            properties.FOG = ( scene.getFog()._vf.visibilityRange > 0 ) ? 1 : 0;
+
+            var sp = this.cache.getShadowRenderingShader( gl, currentLights, properties );
 
             this.stateManager.useProgram( sp );
 
@@ -5082,7 +5109,21 @@ x3dom.gfx_webgl = ( function ()
                 }
             }
 
-            gl.drawArrays( gl.TRIANGLES, 0, 6 );
+            if ( properties.FOG ) { sp.fogType = 999.0; } // draw without fog first
+
+            gl.drawArrays( gl.TRIANGLES, 0, 6 ); //shadows
+
+            // Set fog
+            if ( properties.FOG )
+            {
+                var fog = scene.getFog();
+                this.stateManager.blendColor( fog._vf.color.r, fog._vf.color.g, fog._vf.color.b, 1.0 );
+                this.stateManager.blendFunc( gl.CONSTANT_COLOR, gl.ONE_MINUS_SRC_COLOR );
+                sp.fogColor = fog._vf.color.toGL();
+                sp.fogRange = fog._vf.visibilityRange;
+                sp.fogType = ( fog._vf.fogType == "LINEAR" ) ? 0.0 : 1.0;
+                gl.drawArrays( gl.TRIANGLES, 0, 6 ); // fog
+            }
 
             // cleanup
             var nk = shadowIndex + 1;
@@ -5093,7 +5134,6 @@ x3dom.gfx_webgl = ( function ()
             }
             gl.disableVertexAttribArray( sp.position );
         }
-
         this.stateManager.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
     };
 
