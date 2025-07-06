@@ -993,13 +993,37 @@ x3dom.Viewarea.prototype.fit = function ( min, max, updateCenterOfRotation )
 
     if ( x3dom.isa( viewpoint, x3dom.nodeTypes.OrthoViewpoint ) )
     {
-        this.orthoAnimateTo( dist / 2.01, Math.abs( viewpoint._fieldOfView[ 0 ] ) );
+        var dist = this.getFitViewCenterDist( min, max, viewpoint );
+        this.orthoAnimateTo( dist.dist / 2.01, Math.abs( viewpoint._fieldOfView[ 0 ] ) );
         this.animateTo( viewmat, viewpoint );
     }
     else
     {
         this.animateTo( viewmat, viewpoint );
     }
+};
+
+/**
+ * get center and dist for fitViewMatrix
+ *
+ * @param min
+ * @param max
+ * @param viewpoint
+ * @returns .center and .dist for fitting
+ */
+x3dom.Viewarea.prototype.getFitViewCenterDist = function ( min, max, viewpoint )
+{
+    var dia2 = max.subtract( min ).multiply( 0.5 );  // half diameter
+    var center = min.add( dia2 );                    // center in wc
+    var bsr = dia2.length();                         // bounding sphere radius
+
+    var fov = viewpoint.getFieldOfView();
+
+    var aspect =  Math.min( this._width / this._height, 1 );
+
+    var tanfov2 = Math.tan( fov / 2.0 );
+    var dist = bsr / tanfov2 / aspect;
+    return { center: center, dist: dist };
 };
 
 /**
@@ -1018,22 +1042,16 @@ x3dom.Viewarea.prototype.getFitViewMatrix = function ( min, max, viewpoint, upda
         updateCenterOfRotation = true;
     }
 
-    var dia2 = max.subtract( min ).multiply( 0.5 );  // half diameter
-    var center = min.add( dia2 );                    // center in wc
-    var bsr = dia2.length();                         // bounding sphere radius
+    var centerDist = this.getFitViewCenterDist( min, max, viewpoint );
 
-    var fov = viewpoint.getFieldOfView();
+    var center = centerDist.center;                    // center in wc
+    var dist = centerDist.dist;
 
     var viewmat = x3dom.fields.SFMatrix4f.copy( this.getViewMatrix() );
 
     var rightDir = new x3dom.fields.SFVec3f( viewmat._00, viewmat._01, viewmat._02 );
     var upDir = new x3dom.fields.SFVec3f( viewmat._10, viewmat._11, viewmat._12 );
     var viewDir = new x3dom.fields.SFVec3f( viewmat._20, viewmat._21, viewmat._22 );
-
-    var aspect =  Math.min( this._width / this._height, 1 );
-
-    var tanfov2 = Math.tan( fov / 2.0 );
-    var dist = bsr / tanfov2 / aspect;
 
     var eyePos = center.add( viewDir.multiply( dist ) );
 
@@ -1402,7 +1420,7 @@ x3dom.Viewarea.prototype.onMouseRelease = function ( x, y, buttonState, prevButt
     }
     else
     {
-        var t0 = new Date().getTime();
+        var t0 = Date.now();
         var line = this.calcViewRay( x, y );
         var isect = this._scene.doIntersect( line );
         var obj = line.hitObject;
@@ -1433,7 +1451,7 @@ x3dom.Viewarea.prototype.onMouseRelease = function ( x, y, buttonState, prevButt
             }
         }
 
-        var t1 = new Date().getTime() - t0;
+        var t1 = Date.now() - t0;
         x3dom.debug.logInfo( "Picking time (box): " + t1 + "ms" );
 
         if ( !isect )
